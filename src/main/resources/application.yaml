@@ -1,3 +1,86 @@
+server:
+  port: 8080
+  servlet:
+    context-path: /api/v1
+
 spring:
   application:
     name: HelpFlow
+
+  # PostgreSQL Database Configuration
+  datasource:
+    url: jdbc:postgresql://localhost:5432/HelpFlowDB
+    username: postgres
+    password: "123456"
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 5
+      idle-timeout: 30000
+      connection-timeout: 20000
+
+  # Advanced JPA / Hibernate Configuration
+  jpa:
+    open-in-view: false # Recommended in Hexagonal Architecture to avoid LazyInitialization leaks outside persistence adapters
+    show-sql: false
+    hibernate:
+      ddl-auto: validate # Flyway manages schema creation and migrations; Hibernate only validates
+    properties:
+      hibernate:
+        format_sql: true
+        default_schema: public
+        jdbc:
+          time_zone: UTC
+
+  # Flyway Database Migrations
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    locations: classpath:db/migration
+    default-schema: public
+
+  # Docker Compose lifecycle integration for local development
+  docker:
+    compose:
+      enabled: true
+      lifecycle-management: start-and-stop
+
+  # Stateless JWT Security (OAuth2 Resource Server with NimbusJwtDecoder / JwtEncoder)
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          secret-key: "${JWT_SECRET_KEY:helpflow_super_secure_hmac_sha256_secret_key_2026_viana}"
+          expiration-ms: 3600000 # 1 hour token validity
+
+# Outbound REST Client for technician-dispatch-service
+clients:
+  technician-dispatch:
+    base-url: http://localhost:8081/technician-dispatch
+    connect-timeout-ms: 3000
+    read-timeout-ms: 5000
+
+# Observability: Actuator + Micrometer + Prometheus
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
+  metrics:
+    tags:
+      application: ${spring.application.name}
+  prometheus:
+    metrics:
+      export:
+        enabled: true
+
+# Structured Logging
+logging:
+  level:
+    root: INFO
+    com.vianadanieldev.HelpFlow: DEBUG
+    org.springframework.security: INFO
+    org.hibernate.SQL: DEBUG
