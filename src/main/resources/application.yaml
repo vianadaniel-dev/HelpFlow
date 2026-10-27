@@ -1,0 +1,5 @@
+
+helpflow:
+  corporate-email-domains: helpflow.com
+  assignment:
+    max-active-tickets: 5
