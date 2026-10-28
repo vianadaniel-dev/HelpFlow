@@ -1,5 +1,37 @@
+spring:
+  application:
+    name: support-ticket-service
+  
+  # Configuración de la base de datos apuntando al Docker (Puerto 5433)
+  datasource:
+    url: jdbc:postgresql://localhost:5433/HelpFlowDB
+    username: postgres
+    password: 123456
+    driver-class-name: org.postgresql.Driver
+  
+  # Configuración de JPA/Hibernate
+  jpa:
+    hibernate:
+      ddl-auto: validate # validate porque usas Flyway para crear las tablas
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
 
+  # Migraciones con Flyway
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+
+# Tus configuraciones de dominio
 helpflow:
   corporate-email-domains: helpflow.com
   assignment:
     max-active-tickets: 5
+  dispatch-service:
+    url: http://localhost:8081 # URL donde correrá el technician-dispatch-service
+
+# Configuración del JWT
+jwt:
+  secret: HelpFlowSuperSecretKeyForJwtValidation12345! # Debe tener al menos 32 caracteres
+  expiration: 3600000 # 1 hora en milisegundos

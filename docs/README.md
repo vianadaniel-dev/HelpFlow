@@ -1,203 +1,129 @@
-# 🎫 Ticket Lifecycle, Assignment Flow & SLA Rules
+# HelpFlow - Sistema de Gestión de Soporte IT
 
-## 1. Ticket Status Lifecycle
+HelpFlow es un microservicio backend robusto diseñado para gestionar tickets de soporte técnico, asignaciones y cumplimiento de SLAs (Acuerdos de Nivel de Servicio). Está construido bajo los principios de **Arquitectura Hexagonal (Puertos y Adaptadores)** y **Domain-Driven Design (DDD)**, asegurando un alto desacoplamiento y facilidad de prueba.
 
-Tickets follow a strict lifecycle validated using Bean Validation and cross-field validation rules.
+## 🏗️ Arquitectura Hexagonal
+
+El proyecto está estrictamente dividido en tres capas principales para aislar la lógica de negocio de las tecnologías externas (Bases de datos, APIs REST, Seguridad, etc.).
 
 ```text
-OPEN → ASSIGNED → IN_PROGRESS → RESOLVED → CLOSED
+src/main/java/com/vianadanieldev/helpflow/
+├── domain/                  # 1. Capa de Dominio (El corazón del software)
+│   ├── exception/           # Excepciones puras de negocio (ej. InvalidStateTransitionException)
+│   └── model/               # Entidades puras y Reglas de Negocio (Ticket, User, Assignment)
+│
+├── application/             # 2. Capa de Aplicación (Casos de Uso)
+│   ├── port/                # Contratos (Interfaces)
+│   │   ├── in/              # Puertos de Entrada (Lo que el sistema PUEDE HACER)
+│   │   └── out/             # Puertos de Salida (Lo que el sistema NECESITA del exterior)
+│   └── service/             # Implementación de los casos de uso orquestando el dominio
+│
+└── infrastructure/          # 3. Capa de Infraestructura (Adaptadores)
+    └── adapter/
+        ├── in/              # Adaptadores de Entrada (Controladores REST, GlobalExceptionHandler)
+        └── out/             # Adaptadores de Salida (JPA, Repositorios, Cliente REST externo)
+            ├── client/      # Integración con microservicio externo (Technician Dispatch)
+            └── persistence/ # Entidades JPA, MapStruct Mappers y Spring Data
 ```
 
-Tickets can also transition to `CANCELLED` when cancellation rules permit it.
+### Reglas de Dependencia
+*   **Dominio:** No depende de NADA (Ni Spring, ni JPA, ni Lombok). Es Java puro.
+*   **Aplicación:** Solo depende del Dominio.
+*   **Infraestructura:** Depende de la Aplicación y del Dominio para traducir datos externos a formatos internos.
 
-### Automatic Assignment and SLA Flow
+## 🚀 Stack Tecnológico
 
-1. **Ticket Creation:** A user creates a ticket, which starts in the `OPEN` state.
-2. **SLA Calculation:** The system automatically calculates the SLA deadline based on the ticket priority: `LOW`, `MEDIUM`, `HIGH`, or `CRITICAL`.
-3. **Dispatch Integration:** The `support-ticket-service` calls the `technician-dispatch-service` through a REST adapter.
-4. **Assignment Logic:** The external dispatch service uses a deterministic algorithm based on `ticketId`, category, and priority to suggest a technician and estimate resolution time according to availability (`HIGH`, `MEDIUM`, or `LOW`).
-5. **Transactional Assignment:** The core service applies internal business rules, including maximum active tickets per technician and specialty matching. It then registers the assignment and creates an assignment history record within a single `@Transactional` operation.
-6. **SLA Escalation:** Tickets approaching an SLA deadline are automatically escalated according to the system's escalation rules.
+*   **Lenguaje:** Java 21
+*   **Framework:** Spring Boot 3.3.4
+*   **Base de Datos:** PostgreSQL 17 (vía Docker)
+*   **Migraciones:** Flyway
+*   **Seguridad:** Spring Security + JWT (Stateless)
+*   **Mapeo de Objetos:** MapStruct + Lombok
+*   **Manejo de Errores:** RFC 7807 (ProblemDetail)
 
----
+## 🛠️ Prerrequisitos
 
-## 🚀 2. API Endpoints Reference
+Para ejecutar este proyecto localmente, necesitas tener instalado:
+*   [Java 21 (JDK)](https://adoptium.net/)
+*   [Docker](https://www.docker.com/) y Docker Compose
+*   [Maven](https://maven.apache.org/) (opcional, el proyecto incluye el Wrapper `./mvnw`)
+*   Un cliente REST como [Postman](https://www.postman.com/) o Thunder Client.
 
-Refer to the included Postman collection and Swagger UI for detailed request and response payloads.
+## ⚙️ Instalación y Ejecución
 
-### Authentication Endpoints
+**1. Levantar la base de datos (PostgreSQL)**
+El proyecto incluye un archivo `compose.yaml` configurado. El puerto expuesto es el `5433` para evitar conflictos con instalaciones locales de Postgres.
+```bash
+docker-compose up -d
+```
 
-| Method | Endpoint | Description |
-|---|---|---|
-| `POST` | `/auth/register` | Register a new user or technician. |
-| `POST` | `/auth/login` | Authenticate and retrieve a JWT token. |
+**2. Ejecutar la aplicación**
+Al arrancar, Spring Boot se conectará a Docker y Flyway creará automáticamente las tablas e insertará los **datos de prueba**.
+```bash
+./mvnw clean compile spring-boot:run
+```
+La aplicación estará disponible en `http://localhost:8080`.
 
-### Support Ticket Service (Core)
+## 🧪 Guía de Pruebas (API)
 
-| Method | Endpoint | Description |
-|---|---|---|
-| `POST` | `/api/v1/tickets` | Create a new ticket. |
-| `GET` | `/api/v1/tickets/{id}` | Retrieve ticket details. |
-| `PUT` | `/api/v1/tickets/{id}/status` | Update ticket status and record history. |
-| `GET` | `/actuator/health` | Check system health. |
-| `GET` | `/actuator/metrics` | Retrieve application and system metrics. |
+Flyway inyecta automáticamente los siguientes usuarios de prueba (La contraseña para ambos es `123456`):
+*   **Usuario Regular:** `daniel@helpflow.com` (Puede crear tickets)
+*   **Técnico:** `tecnico@helpflow.com` (Puede atender tickets)
 
-**Access control:**
-- Ticket creation is available to authorized users.
-- Ticket status updates are restricted to technicians and administrators.
-- Protected endpoints require valid authentication and authorization.
+### 1. Autenticación (Login)
+Obtén el token JWT para autorizar tus peticiones.
 
-### Technician Dispatch Service (External Mock)
-
-| Method | Endpoint | Description |
-|---|---|---|
-| `POST` | `/technician-dispatch` | Returns a deterministic technician assignment suggestion and availability information. |
-
-Expected request fields:
-
+*   **Endpoint:** `POST /auth/login`
+*   **Body (JSON):**
 ```json
 {
-  "ticketId": "example-ticket-id",
-  "categoria": "HARDWARE",
-  "prioridad": "HIGH"
+    "corporateEmail": "daniel@helpflow.com",
+    "password": "123456"
+}
+```
+*   **Respuesta:** Guarda el campo `"accessToken"`.
+
+### 2. Registrar un Ticket
+Crea un ticket de soporte utilizando el token del usuario regular.
+
+*   **Endpoint:** `POST /api/v1/tickets`
+*   **Headers:** `Authorization: Bearer <TU_TOKEN>`
+*   **Body (JSON):**
+```json
+{
+    "requesterId": "11111111-1111-1111-1111-111111111111",
+    "title": "Problema con mi equipo",
+    "description": "El monitor no da imagen",
+    "category": "HARDWARE",
+    "headquarters": "BARRANQUILLA"
 }
 ```
 
-> Note: The example values are illustrative. Use the field types and accepted values defined by the actual API implementation.
+### 3. Actualizar Estado del Ticket
+Inicia sesión con el correo del **Técnico** (`tecnico@helpflow.com`) para obtener un nuevo token, y úsalo para cambiar el estado del ticket.
 
----
-
-## 🛠️ 3. Local Execution & Deployment
-
-### Prerequisites
-
-Ensure the following tools are installed:
-
-- JDK 17 or later
-- Docker and Docker Compose
-- Maven (if running Maven commands directly)
-
-### Option 1: Run with Docker Compose (Recommended)
-
-Docker Compose starts the database, core service, and technician dispatch service in isolated containers using multi-stage Dockerfiles.
-
-**1. Ensure Docker is running.**
-
-**2. Open a terminal in the project root directory.**
-
-**3. Build and start the services:**
-
-```bash
-docker-compose up --build -d
+*   **Endpoint:** `PUT /api/v1/tickets/{ticketId}/status`
+*   **Headers:** `Authorization: Bearer <TOKEN_DEL_TECNICO>`
+*   **Body (JSON):**
+```json
+{
+    "targetStatus": "EN_PROGRESS",
+    "observation": "Revisando conexiones de video",
+    "performedBy": "22222222-2222-2222-2222-222222222222"
+}
 ```
 
-**4. Access the services:**
+## 🛡️ Manejo Global de Errores
 
-| Service | URL |
-|---|---|
-| Support Ticket Service | [http://localhost:8080](http://localhost:8080) |
-| Technician Dispatch Service | [http://localhost:8081](http://localhost:8081) |
+El proyecto implementa el estándar **RFC 7807 (Problem Details for HTTP APIs)**. Cualquier excepción de negocio (ej. transición de estado inválida, técnico no encontrado) o error interno será capturado por el `GlobalExceptionHandler` y devuelto en un formato uniforme y predecible:
 
-### Option 2: Run Locally for Development
-
-**1. Start the PostgreSQL database:**
-
-From the project root directory, run:
-
-```bash
-docker-compose up -d db
+```json
+{
+    "type": "https://helpflow.com/errors/invalid-state",
+    "title": "Invalid Ticket State Transition",
+    "status": 422,
+    "detail": "Cannot transition ticket from OPEN to CLOSED",
+    "instance": "/api/v1/tickets/123/status",
+    "timestamp": "2026-10-28T00:00:00Z"
+}
 ```
-
-**2. Start the Technician Dispatch Service:**
-
-```bash
-cd technician-dispatch-service
-./mvnw spring-boot:run
-```
-
-**3. Start the Support Ticket Service:**
-
-In a separate terminal:
-
-```bash
-cd support-ticket-service
-./mvnw spring-boot:run
-```
-
-> Ensure each service has the correct database connection settings, environment variables, and port configuration before starting it.
-
----
-
-## 🧪 4. Testing & Observability
-
-### Automated Tests
-
-The project includes an automated test suite using JUnit 5, Mockito, and Testcontainers to validate application behavior and integration scenarios.
-
-Test coverage includes:
-
-- **Unit Tests:** Domain logic, SLA calculations, and mocked hexagonal architecture ports.
-- **Integration Tests:** JPA repositories, REST adapters, JWT authentication and authorization flows, and database interactions using Testcontainers.
-
-Run the tests with Maven:
-
-```bash
-mvn clean test
-```
-
-> Run this command from the appropriate Maven project directory, or from the root if the project is configured as a multi-module Maven build.
-
-### Metrics and Logging
-
-Spring Boot Actuator and Micrometer are configured to monitor application behavior, including:
-
-- Mean time to first response.
-- Mean time to ticket resolution.
-- Tickets that have breached their SLA.
-- Ticket creation grouped by category and priority.
-- Authentication failures and denied access attempts.
-
-### Global Exception Handling
-
-Global exception handling is implemented using `@ControllerAdvice`.
-
-API errors are standardized using RFC 9457 Problem Details, covering scenarios such as:
-
-- JPA and database-related errors.
-- Request validation failures.
-- Authentication and authorization errors.
-- Access-denied exceptions.
-
----
-
-## 📸 5. Evidence & Screenshots
-
-Add screenshots demonstrating the application functionality and test results.
-
-### API Testing
-
-_Insert Postman requests and Swagger UI screenshots here._
-
-### SLA Monitoring and Metrics
-
-_Insert screenshots showing SLA calculations, escalations, SLA breaches, and Actuator metrics here._
-
-### Structured Logging
-
-_Insert screenshots demonstrating structured application logs and error handling here._
-
----
-
-## 📚 6. Technology Stack
-
-- **Language:** Java 17+
-- **Framework:** Spring Boot
-- **Security:** Spring Security and JWT
-- **Persistence:** Spring Data JPA and PostgreSQL
-- **Architecture:** Hexagonal architecture
-- **Validation:** Bean Validation
-- **Inter-service Communication:** REST
-- **Testing:** JUnit 5, Mockito, and Testcontainers
-- **Observability:** Spring Boot Actuator and Micrometer
-- **Containerization:** Docker and Docker Compose
-- **Build Tool:** Maven
