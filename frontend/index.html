@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HelpFlow - IT Support</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .card { background: white; padding: 30px; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); width: 400px; }
+        h2 { text-align: center; color: #333; margin-bottom: 20px; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; font-weight: bold; margin-bottom: 5px; color: #555; }
+        input, select, textarea { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 5px; box-sizing: border-box; font-family: inherit; }
+        button { width: 100%; background: #0056b3; color: white; padding: 12px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; font-size: 16px; margin-top: 10px; transition: 0.3s; }
+        button:hover { background: #004494; }
+        .hidden { display: none; }
+        .alert { padding: 10px; background: #d4edda; color: #155724; border-radius: 5px; margin-bottom: 15px; text-align: center; }
+    </style>
+</head>
+<body>
+
+<!-- Panel de Login -->
+<div class="card" id="login-panel">
+    <h2>Ingreso HelpFlow</h2>
+    <div class="form-group">
+        <label>Correo Corporativo</label>
+        <input type="email" id="email" value="daniel@helpflow.com">
+    </div>
+    <div class="form-group">
+        <label>Contraseña</label>
+        <input type="password" id="password" value="123456">
+    </div>
+    <button onclick="login()">Iniciar Sesión</button>
+</div>
+
+<!-- Panel de Creación de Tickets (Oculto al inicio) -->
+<div class="card hidden" id="ticket-panel">
+    <h2>Nuevo Ticket</h2>
+    <div id="success-msg" class="alert hidden">¡Ticket creado con éxito!</div>
+
+    <div class="form-group">
+        <label>Título del Problema</label>
+        <input type="text" id="title" placeholder="Ej: La pantalla no enciende">
+    </div>
+    <div class="form-group">
+        <label>Descripción detallada</label>
+        <textarea id="description" rows="3"></textarea>
+    </div>
+    <div class="form-group">
+        <label>Categoría</label>
+        <select id="category">
+            <option value="HARDWARE">Hardware</option>
+            <option value="SOFTWARE">Software</option>
+            <option value="NETWORK">Redes e Internet</option>
+        </select>
+    </div>
+    <div class="form-group">
+        <label>Sede</label>
+        <input type="text" id="headquarters" value="BARRANQUILLA" readonly>
+    </div>
+    <button onclick="crearTicket()">Crear Ticket</button>
+</div>
+
+<script>
+    // Lógica de JavaScript para conectar con tu Backend
+    let jwtToken = '';
+
+    async function login() {
+        const email = document.getElementById('email').value;
+        const password = document.getElementById('password').value;
+
+        try {
+            const response = await fetch('http://localhost:8080/auth/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ corporateEmail: email, password: password })
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                jwtToken = data.accessToken; // Guardamos el token en memoria
+
+                // Ocultamos el login y mostramos el panel de tickets
+                document.getElementById('login-panel').classList.add('hidden');
+                document.getElementById('ticket-panel').classList.remove('hidden');
+            } else {
+                alert('Error en credenciales');
+            }
+        } catch (error) {
+            alert('No se pudo conectar al servidor. ¿Está prendido Spring Boot?');
+        }
+    }
+
+    async function crearTicket() {
+        const ticketData = {
+            // Usamos el ID del usuario de prueba que inyectaste con Flyway
+            requesterId: "11111111-1111-1111-1111-111111111111",
+            title: document.getElementById('title').value,
+            description: document.getElementById('description').value,
+            category: document.getElementById('category').value,
+            headquarters: document.getElementById('headquarters').value
+        };
+
+        try {
+            const response = await fetch('http://localhost:8080/api/v1/tickets', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + jwtToken // Inyectamos el JWT de seguridad
+                },
+                body: JSON.stringify(ticketData)
+            });
+
+            if (response.status === 201) {
+                document.getElementById('success-msg').classList.remove('hidden');
+                setTimeout(() => document.getElementById('success-msg').classList.add('hidden'), 4000);
+                document.getElementById('title').value = '';
+                document.getElementById('description').value = '';
+            } else {
+                alert('Error al crear el ticket');
+            }
+        } catch (error) {
+            alert('Error de conexión');
+        }
+    }
+</script>
+</body>
+</html>
