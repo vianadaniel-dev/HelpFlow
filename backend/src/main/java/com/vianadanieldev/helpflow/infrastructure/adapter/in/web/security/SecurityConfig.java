@@ -31,7 +31,8 @@ public class SecurityConfig {
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(authz -> authz
-                        .requestMatchers("/auth/**", "/actuator/health").permitAll()
+                        // 👇 Aquí agregamos las rutas de Swagger 👇
+                        .requestMatchers("/auth/**", "/actuator/health", "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/tickets").hasAnyRole("USUARIO", "ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/api/v1/tickets/*/status").hasAnyRole("TECNICO", "ADMIN")
                         .requestMatchers("/actuator/**").hasRole("ADMIN")
